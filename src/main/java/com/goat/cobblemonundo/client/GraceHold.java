@@ -21,14 +21,11 @@ import java.util.UUID;
  *
  * Sans le mod côté serveur, un choix envoyé ne peut plus être repris : le serveur Cobblemon refuse
  * tout nouveau choix tant que le tour n'est pas joué. On fait donc l'inverse : quand tu valides,
- * le choix est retenu quelques secondes sur ton PC (avec un bouton Annuler et un bouton Envoyer),
- * puis envoyé normalement par le code de Cobblemon lui-même.
+ * le choix est mis en attente sur ton PC avec deux boutons, Envoyer et Annuler. Rien ne part tant
+ * que tu n'as pas cliqué sur Envoyer ; à ce moment le code de Cobblemon l'envoie normalement.
  */
 public final class GraceHold {
-    private record Hold(UUID battleId, long startMs, long durationMs) {
-    }
-
-    private static Hold hold;
+    private static UUID heldBattleId;
     /** Vrai pendant qu'on rappelle nous-mêmes checkForFinishedChoosing() pour envoyer pour de vrai. */
     private static boolean sending;
 
@@ -37,7 +34,7 @@ public final class GraceHold {
 
     /**
      * Appelé (via le mixin) au début de ClientBattle.checkForFinishedChoosing().
-     * @return true si on retient le choix (Cobblemon ne l'envoie pas tout de suite)
+     * @return true si on met le choix en attente (Cobblemon ne l'envoie pas tout de suite)
      */
     public static boolean interceptSubmit(ClientBattle battle) {
         if (sending || battle.getSpectating()) {
@@ -48,10 +45,10 @@ public final class GraceHold {
         }
         boolean pvp = isPvP(battle);
         if (pvp && ClientPlayNetworking.canSend(UndoRequestPayload.TYPE)) {
-            return false; // le serveur a le mod : annulation façon Showdown, pas besoin de délai
+            return false; // le serveur a le mod : annulation façon Showdown, pas besoin d'attente
         }
         UndoConfig config = UndoConfig.get();
-        if (config.delaiSecondes <= 0) {
+        if (!config.confirmerAvantEnvoi) {
             return false;
         }
         if (!pvp && !config.aussiContrePnjEtSauvages) {
@@ -75,7 +72,7 @@ public final class GraceHold {
             return false;
         }
 
-        hold = new Hold(battle.getBattleId(), System.currentTimeMillis(), Math.round(config.delaiSecondes * 1000.0));
+        heldBattleId = battle.getBattleId();
         battle.setMustChoose(false); // masque le menu de choix pendant l'attente
         return true;
     }
@@ -84,37 +81,10 @@ public final class GraceHold {
         return heldBattle() != null;
     }
 
-    /** Secondes restantes avant l'envoi automatique. */
-    public static double secondsLeft() {
-        Hold h = hold;
-        if (h == null) {
-            return 0;
-        }
-        long left = h.startMs + h.durationMs - System.currentTimeMillis();
-        return Math.max(0, left) / 1000.0;
-    }
-
-    /** Progression de 0 (on vient de valider) à 1 (envoi). */
-    public static float progress() {
-        Hold h = hold;
-        if (h == null || h.durationMs <= 0) {
-            return 1F;
-        }
-        float p = (System.currentTimeMillis() - h.startMs) / (float) h.durationMs;
-        return Math.max(0F, Math.min(1F, p));
-    }
-
-    /** À appeler à chaque tick client : envoie le choix quand le délai est écoulé. */
-    static void tick() {
-        if (hold != null && heldBattle() != null && secondsLeft() <= 0) {
-            sendNow();
-        }
-    }
-
-    /** Bouton "Envoyer" : on n'attend pas la fin du délai. */
+    /** Bouton "Envoyer" (ou Entrée). */
     public static void sendNow() {
         ClientBattle battle = heldBattle();
-        hold = null;
+        heldBattleId = null;
         if (battle == null) {
             return;
         }
@@ -126,10 +96,10 @@ public final class GraceHold {
         }
     }
 
-    /** Bouton "Annuler" : on efface les choix et le menu de Cobblemon réapparaît. */
+    /** Bouton "Annuler" (ou Retour arrière) : on efface les choix et le menu de Cobblemon réapparaît. */
     public static void cancel() {
         ClientBattle battle = heldBattle();
-        hold = null;
+        heldBattleId = null;
         if (battle == null) {
             return;
         }
@@ -150,22 +120,22 @@ public final class GraceHold {
     }
 
     static void reset() {
-        hold = null;
+        heldBattleId = null;
         sending = false;
     }
 
     /** Le combat concerné par l'attente, ou null si l'attente n'a plus de sens. */
     private static ClientBattle heldBattle() {
-        Hold h = hold;
-        if (h == null) {
+        UUID id = heldBattleId;
+        if (id == null) {
             return null;
         }
         ClientBattle battle = CobblemonClient.INSTANCE.getBattle();
         if (battle == null
-                || !h.battleId.equals(battle.getBattleId())
+                || !id.equals(battle.getBattleId())
                 || battle.getMustChoose()
                 || battle.getFirstUnansweredRequest() != null) {
-            hold = null;
+            heldBattleId = null;
             return null;
         }
         return battle;

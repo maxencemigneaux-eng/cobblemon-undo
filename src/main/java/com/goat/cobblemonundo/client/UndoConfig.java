@@ -17,12 +17,13 @@ import java.nio.file.Path;
  */
 public final class UndoConfig {
     /**
-     * Mode 100 % client (serveur sans le mod) : combien de secondes ton choix est retenu
-     * avant d'être envoyé. Pendant ce temps tu peux l'annuler. 0 = désactivé.
+     * Mode 100 % client (serveur sans le mod) : après ton choix, attendre que tu cliques sur
+     * « Envoyer » (ou Entrée) avant de l'envoyer. Tant que ce n'est pas envoyé, tu peux « Annuler ».
+     * false = comportement normal de Cobblemon (envoi immédiat).
      */
-    public double delaiSecondes = 6.0;
+    public boolean confirmerAvantEnvoi = true;
 
-    /** Mode 100 % client : appliquer aussi le délai contre les dresseurs PNJ et les Pokémon sauvages. */
+    /** Mode 100 % client : demander aussi la confirmation contre les dresseurs PNJ et les Pokémon sauvages. */
     public boolean aussiContrePnjEtSauvages = false;
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();

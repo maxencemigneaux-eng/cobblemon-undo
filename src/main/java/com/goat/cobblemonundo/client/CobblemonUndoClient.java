@@ -30,8 +30,8 @@ import org.lwjgl.glfw.GLFW;
  *
  * 1) Le serveur a aussi le mod  -> comme Showdown : après ton choix, "En attente de l'adversaire..."
  *    + bouton Annuler, utilisable tant que l'adversaire n'a pas joué.
- * 2) Le serveur n'a pas le mod  -> ton choix est retenu quelques secondes (3 s par défaut) avec
- *    les boutons Annuler / Envoyer, puis il part tout seul.
+ * 2) Le serveur n'a pas le mod  -> ton choix est mis en attente avec deux boutons :
+ *    Envoyer (ou Entrée) et Annuler (ou Retour arrière). Rien ne part tant que tu n'envoies pas.
  *
  * Les boutons s'affichent en bas à gauche de l'écran de combat, là où sont normalement
  * Attaque / Sac / Pokémon / Fuite.
@@ -48,6 +48,7 @@ public final class CobblemonUndoClient implements ClientModInitializer {
     private static volatile boolean serverAllowsUndo = false;
 
     private static KeyMapping undoKey;
+    private static KeyMapping sendKey;
 
     @Override
     public void onInitializeClient() {
@@ -66,12 +67,21 @@ public final class CobblemonUndoClient implements ClientModInitializer {
                 InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_BACKSPACE,
                 "category.cobblemon_undo"));
+        sendKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                "key.cobblemon_undo.send",
+                InputConstants.Type.KEYSYM,
+                GLFW.GLFW_KEY_ENTER,
+                "category.cobblemon_undo"));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            GraceHold.tick();
-            // Touche utilisable aussi quand l'écran de combat est réduit
+            // Touches utilisables aussi quand l'écran de combat est réduit
             while (undoKey.consumeClick()) {
                 undo();
+            }
+            while (sendKey.consumeClick()) {
+                if (currentMode() == Mode.GRACE) {
+                    GraceHold.sendNow();
+                }
             }
         });
 
@@ -104,8 +114,13 @@ public final class CobblemonUndoClient implements ClientModInitializer {
             });
 
             ScreenKeyboardEvents.allowKeyPress(screen).register((s, key, scancode, modifiers) -> {
-                if (currentMode() != Mode.NONE && undoKey.matches(key, scancode)) {
+                Mode mode = currentMode();
+                if (mode != Mode.NONE && undoKey.matches(key, scancode)) {
                     undo();
+                    return false;
+                }
+                if (mode == Mode.GRACE && sendKey.matches(key, scancode)) {
+                    GraceHold.sendNow();
                     return false;
                 }
                 return true;
@@ -168,30 +183,32 @@ public final class CobblemonUndoClient implements ClientModInitializer {
         graphics.pose().translate(0.0F, 0.0F, 400.0F); // au-dessus de l'interface de combat
 
         Component label = mode == Mode.GRACE
-                ? Component.translatable("cobblemon_undo.sending_in", String.format("%.1f", GraceHold.secondsLeft()))
+                ? Component.translatable("cobblemon_undo.confirm")
                 : Component.translatable("cobblemon_undo.waiting");
         graphics.drawString(font, label.copy().withStyle(ChatFormatting.ITALIC), X, y - 13, 0xFFFFFFFF, true);
 
-        drawButton(graphics, font, Component.translatable("cobblemon_undo.button"), X, y, mouseX, mouseY);
-
+        int sendX = X + BUTTON_WIDTH + GAP;
+        // Fonds des boutons d'abord, puis le texte par-dessus
+        drawButtonBackground(graphics, X, y, mouseX, mouseY);
         if (mode == Mode.GRACE) {
-            int sendX = X + BUTTON_WIDTH + GAP;
-            drawButton(graphics, font, Component.translatable("cobblemon_undo.send_now"), sendX, y, mouseX, mouseY);
-
-            // Barre de progression sous les boutons
-            int barWidth = BUTTON_WIDTH * 2 + GAP;
-            int barY = y + BUTTON_HEIGHT + 3;
-            graphics.fill(X, barY, X + barWidth, barY + 3, 0x90000000);
-            graphics.fill(X, barY, X + Math.round(barWidth * GraceHold.progress()), barY + 3, 0xFF55C8FF);
+            drawButtonBackground(graphics, sendX, y, mouseX, mouseY);
+        }
+        graphics.flush();
+        drawButtonText(graphics, font, Component.translatable("cobblemon_undo.button"), X, y);
+        if (mode == Mode.GRACE) {
+            drawButtonText(graphics, font, Component.translatable("cobblemon_undo.send_now"), sendX, y);
         }
 
         graphics.pose().popPose();
     }
 
-    private static void drawButton(GuiGraphics graphics, Font font, Component text, int x, int y, int mouseX, int mouseY) {
+    private static void drawButtonBackground(GuiGraphics graphics, int x, int y, int mouseX, int mouseY) {
         boolean hovered = isOver(mouseX, mouseY, x, y);
         graphics.fill(x, y, x + BUTTON_WIDTH, y + BUTTON_HEIGHT, hovered ? 0xE0505050 : 0xD0303030);
         graphics.renderOutline(x, y, BUTTON_WIDTH, BUTTON_HEIGHT, hovered ? 0xFFFFFFFF : 0xFFA0A0A0);
+    }
+
+    private static void drawButtonText(GuiGraphics graphics, Font font, Component text, int x, int y) {
         graphics.drawCenteredString(font, text, x + BUTTON_WIDTH / 2, y + (BUTTON_HEIGHT - 8) / 2, 0xFFFFFFFF);
     }
 }

@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * checkForFinishedChoosing() est la fonction de Cobblemon qui envoie tes choix au serveur
- * quand tu as fini de choisir. On s'y glisse pour pouvoir retenir l'envoi quelques secondes.
+ * quand tu as fini de choisir. On s'y glisse pour retenir l'envoi jusqu'à ce que tu cliques sur Envoyer.
  * (remap = false : c'est une classe de Cobblemon, pas de Minecraft)
  */
 @Mixin(value = ClientBattle.class, remap = false)
