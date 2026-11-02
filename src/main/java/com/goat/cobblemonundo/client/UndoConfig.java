@@ -20,7 +20,7 @@ public final class UndoConfig {
      * Mode 100 % client (serveur sans le mod) : combien de secondes ton choix est retenu
      * avant d'être envoyé. Pendant ce temps tu peux l'annuler. 0 = désactivé.
      */
-    public double delaiSecondes = 3.0;
+    public double delaiSecondes = 6.0;
 
     /** Mode 100 % client : appliquer aussi le délai contre les dresseurs PNJ et les Pokémon sauvages. */
     public boolean aussiContrePnjEtSauvages = false;
